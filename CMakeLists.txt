@@ -21,5 +21,5 @@ add_subdirectory( externals EXCLUDE_FROM_ALL )
 # add_subdirectory( graphics )
 
 if(RAST_BUILD_SAMPLES)
-# add_subdirectory(samples)
+    add_subdirectory(samples)
 endif(RAST_BUILD_SAMPLES)
