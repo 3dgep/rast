@@ -45,6 +45,12 @@ public:
 
     bool isFullscreen() const noexcept;
 
+    void setVSync( bool vSync );
+
+    void toggleVSync();
+
+    bool isVSync() const noexcept;
+
 private:
     static bool SDLCALL eventWatch( void* userdata, SDL_Event* event );
 
