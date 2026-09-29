@@ -2,10 +2,12 @@ cmake_minimum_required(VERSION 3.15...4.2)
 
 set( INC_FILES
     inc/graphics/Window.hpp
+    inc/graphics/Color.hpp
 )
 
 set( SRC_FILES 
     src/Window.cpp
+    src/Color.cpp
 )
 
 set( IMGUI_INC_FILES
@@ -48,7 +50,7 @@ add_library( rast::graphics ALIAS graphics )
 target_compile_features(graphics PUBLIC cxx_std_23)
 target_compile_definitions(graphics PRIVATE IMGUI_ENABLE_FREETYPE)
 target_include_directories(graphics PUBLIC inc ../externals/imgui ../externals/imgui/backends)
-target_link_libraries(graphics PUBLIC Freetype::Freetype SDL3::SDL3)
+target_link_libraries(graphics PUBLIC rast::math Freetype::Freetype SDL3::SDL3)
 
 # Warning level 4 and treat warnings as errors.
 target_compile_options(graphics
