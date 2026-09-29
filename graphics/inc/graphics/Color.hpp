@@ -3,8 +3,9 @@
 #include <math/Math.hpp>
 
 #include <cassert>
-#include <cstdint>
+#include <cmath>
 #include <compare>
+#include <cstdint>
 
 namespace rast
 {
@@ -35,6 +36,9 @@ union Color
     Color& operator*=( float rhs ) noexcept;
     Color  operator/( float rhs ) const noexcept;
     Color& operator/=( float rhs ) noexcept;
+
+    static Color fromFloats( float r, float g, float b, float a = 1.0f );
+    static Color fromHSV( float H, float S, float V ) noexcept;
 
     uint32_t rgba;
     struct RGBA
@@ -121,7 +125,7 @@ inline Color& Color::operator*=( const Color& rhs ) noexcept
     return *this;
 }
 
-inline Color Color::operator*(float rhs) const noexcept
+inline Color Color::operator*( float rhs ) const noexcept
 {
     const auto red   = static_cast<uint8_t>( math::clamp( static_cast<float>( channels.r ) * rhs, 0.0f, 255.0f ) );
     const auto green = static_cast<uint8_t>( math::clamp( static_cast<float>( channels.g ) * rhs, 0.0f, 255.0f ) );
@@ -155,9 +159,99 @@ inline Color& Color::operator/=( float rhs ) noexcept
     return operator*=( rhs );
 }
 
-inline Color operator*(float lhs, const Color& rhs) noexcept
+Color Color::fromFloats( float r, float g, float b, float a )
+{
+    const auto red   = static_cast<uint8_t>( math::clamp( r * 255.0f, 0.0f, 255.0f ) );
+    const auto green = static_cast<uint8_t>( math::clamp( g * 255.0f, 0.0f, 255.0f ) );
+    const auto blue  = static_cast<uint8_t>( math::clamp( b * 255.0f, 0.0f, 255.0f ) );
+    const auto alpha = static_cast<uint8_t>( math::clamp( a * 255.0f, 0.0f, 255.0f ) );
+
+    return { red, green, blue, alpha };
+}
+
+Color Color::fromHSV( float H, float S, float V )
+{
+    H = fmodf( H, 360.0f );
+    if ( H < 0.0f )
+        H += 360.0f;
+
+    S = math::clamp( S, 0.0f, 1.0f );
+    V = math::clamp( V, 0.0f, 1.0f );
+
+    float C  = V * S;
+    float m  = V - C;
+    float H2 = H / 60.0f;
+    float X  = C * ( 1.0f - fabsf( fmodf( H2, 2.0f ) - 1.0f ) );
+
+    float r = 0.0f, g = 0.0f, b = 0.0f;
+
+    switch ( static_cast<int>( H2 ) )
+    {
+    case 0:
+        r = C;
+        g = X;
+        b = 0;
+        break;
+    case 1:
+        r = X;
+        g = C;
+        b = 0;
+        break;
+    case 2:
+        r = 0;
+        g = C;
+        b = X;
+        break;
+    case 3:
+        r = 0;
+        g = X;
+        b = C;
+    case 4:
+        r = X;
+        g = 0;
+        b = C;
+        break;
+    case 5:
+        r = C;
+        g = 0;
+        b = X;
+    default:
+        r = 0;
+        g = 0;
+        b = 0;
+        break;
+    }
+
+    r += m;
+    g += m;
+    b += m;
+
+    return fromFloats( r, g, b );
+}
+
+inline Color operator*( float lhs, const Color& rhs ) noexcept
 {
     return rhs * lhs;
+}
+
+inline Color min( const Color& c1, const Color& c2 )
+{
+    const auto r = math::min( c1.channels.r, c2.channels.r );
+    const auto g = math::min( c1.channels.g, c2.channels.g );
+    const auto b = math::min( c1.channels.b, c2.channels.b );
+    const auto a = math::min( c1.channels.a, c2.channels.a );
+
+    return { r, g, b, a };
+}
+
+inline Color max( const Color& c1, const Color& c2 )
+{
+    const auto r = math::max( c1.channels.r, c2.channels.r );
+    const auto g = math::max( c1.channels.g, c2.channels.g );
+    const auto b = math::max( c1.channels.b, c2.channels.b );
+    const auto a = math::max( c1.channels.a, c2.channels.a );
+
+    return { r, g, b, a };
 }
 
 }  // namespace graphics
