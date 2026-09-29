@@ -3,6 +3,7 @@
 #include <SDL3/SDL_events.h>
 #include <string_view>
 
+struct ImGuiContext;
 struct SDL_Window;
 struct SDL_Renderer;
 
@@ -51,8 +52,12 @@ public:
 
     bool isVSync() const noexcept;
 
+    bool setCurrent();
+
 private:
     static bool SDLCALL eventWatch( void* userdata, SDL_Event* event );
+
+    void beginFrame();
 
     SDL_Window*   m_Window     = nullptr;
     SDL_Renderer* m_Renderer   = nullptr;
@@ -61,6 +66,8 @@ private:
     bool          m_Fullscreen = false;
     bool          m_VSync      = true;
     bool          m_Close      = false;
+
+    ImGuiContext* m_ImGuiContext = nullptr;
 
 };  // class Window
 

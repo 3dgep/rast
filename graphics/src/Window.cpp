@@ -2,6 +2,12 @@
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_render.h>
 #include <SDL3/SDL_video.h>
+
+#include <imgui.h>
+#include <imgui_impl_sdl3.h>
+#include <imgui_impl_sdlrenderer3.h>
+#include <imgui_internal.h>  // ImGuiContext
+
 #include <graphics/Window.hpp>
 
 #include <stdexcept>
@@ -50,6 +56,7 @@ Window::Window( Window&& window ) noexcept
 , m_Height( std::exchange( window.m_Height, -1 ) )
 , m_Fullscreen( std::exchange( window.m_Fullscreen, false ) )
 , m_VSync( std::exchange( window.m_VSync, true ) )
+, m_ImGuiContext( std::exchange( window.m_ImGuiContext, nullptr ) )
 {}
 
 Window& Window::operator=( Window&& window ) noexcept
@@ -57,12 +64,13 @@ Window& Window::operator=( Window&& window ) noexcept
     if ( this == &window )
         return *this;
 
-    m_Window     = std::exchange( window.m_Window, nullptr );
-    m_Renderer   = std::exchange( window.m_Renderer, nullptr );
-    m_Width      = std::exchange( window.m_Width, -1 );
-    m_Height     = std::exchange( window.m_Height, -1 );
-    m_Fullscreen = std::exchange( window.m_Fullscreen, false );
-    m_VSync      = std::exchange( window.m_VSync, true );
+    m_Window       = std::exchange( window.m_Window, nullptr );
+    m_Renderer     = std::exchange( window.m_Renderer, nullptr );
+    m_Width        = std::exchange( window.m_Width, -1 );
+    m_Height       = std::exchange( window.m_Height, -1 );
+    m_Fullscreen   = std::exchange( window.m_Fullscreen, false );
+    m_VSync        = std::exchange( window.m_VSync, true );
+    m_ImGuiContext = std::exchange( window.m_ImGuiContext, nullptr );
 
     return *this;
 }
@@ -101,11 +109,49 @@ void Window::create( std::string_view title, int width, int height, bool fullscr
     SDL_SetRenderVSync( m_Renderer, m_VSync ? 1 : 0 );
 
     resize( width, height );
+
+    m_ImGuiContext = ImGui::CreateContext();
+    ImGui::SetContextName( m_ImGuiContext, title.data() );
+    ImGui::SetCurrentContext( m_ImGuiContext );
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;  // This is not working in SDL3 (yet).
+
+    ImGui::StyleColorsDark();
+    float       primaryDisplayScale = SDL_GetDisplayContentScale( SDL_GetDisplayForWindow( m_Window ) );
+    ImGuiStyle& style               = ImGui::GetStyle();
+    style.ScaleAllSizes( primaryDisplayScale );
+    style.FontScaleDpi         = primaryDisplayScale;
+    io.ConfigDpiScaleViewports = true;
+
+    // Setup platoform/renderer backends for ImGui.
+    ImGui_ImplSDL3_InitForSDLRenderer( m_Window, m_Renderer );
+    ImGui_ImplSDLRenderer3_Init( m_Renderer );
+
+    beginFrame();
 }
 
 void Window::destroy()
 {
     SDL_RemoveEventWatch( &Window::eventWatch, this );
+
+    if ( m_ImGuiContext )
+    {
+        ImGuiContext* previousContext = ImGui::GetCurrentContext();
+        if ( previousContext == m_ImGuiContext )
+            previousContext = nullptr;
+
+        ImGui::SetCurrentContext( m_ImGuiContext );
+        ImGui_ImplSDLRenderer3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+        ImGui::DestroyContext( m_ImGuiContext );
+        m_ImGuiContext = nullptr;
+        ImGui::SetCurrentContext( previousContext );
+    }
+
     SDL_DestroyRenderer( m_Renderer );
     SDL_DestroyWindow( m_Window );
 
@@ -117,13 +163,32 @@ void Window::destroy()
     m_VSync      = true;
 }
 
+bool Window::setCurrent()
+{
+    if ( m_ImGuiContext )
+    {
+        ImGui::SetCurrentContext( m_ImGuiContext );
+        return true;
+    }
+
+    return false;
+}
+
+void Window::beginFrame()
+{
+    ImGui::SetCurrentContext( m_ImGuiContext );
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+}
+
 void Window::close()
 {
     if ( !m_Window )
         return;
 
     m_Close = true;
-    SDL_HideWindow( m_Window ); // Hide the window, but don't destroy until later.
+    SDL_HideWindow( m_Window );  // Hide the window, but don't destroy until later.
 }
 
 bool Window::isValid() const
@@ -142,37 +207,46 @@ void Window::clear( uint8_t r, uint8_t g, uint8_t b, uint8_t a )
 
 void Window::preset()
 {
-    if ( !m_Renderer )
+    if ( !m_ImGuiContext || !m_Renderer )
         return;
 
-    if (!SDL_RenderPresent( m_Renderer ))
+    ImGui::SetCurrentContext( m_ImGuiContext );
+    ImGui::Render();
+
+    ImGui::UpdatePlatformWindows();
+    ImGui::RenderPlatformWindowsDefault();
+    ImGui_ImplSDLRenderer3_RenderDrawData( ImGui::GetDrawData(), m_Renderer );
+
+    if ( !SDL_RenderPresent( m_Renderer ) )
     {
         SDL_LogError( SDL_LOG_CATEGORY_APPLICATION, "Failed to preset: %s", SDL_GetError() );
         // Throw an exception?
     }
+
+    beginFrame();
 }
 
 void Window::resize( int width, int height )
 {
-    if (m_Width != width || m_Height != height )
+    if ( m_Width != width || m_Height != height )
     {
-        width = std::max( 1, width );
+        width  = std::max( 1, width );
         height = std::max( 1, height );
 
-        if (!SDL_SetWindowSize( m_Window, width, height ))
+        if ( !SDL_SetWindowSize( m_Window, width, height ) )
         {
             SDL_LogError( SDL_LOG_CATEGORY_APPLICATION, "Failed to resize the window: %s", SDL_GetError() );
             return;
         }
 
-        m_Width = width;
+        m_Width  = width;
         m_Height = height;
     }
 }
 
 void Window::setFullscreen( bool fullscreen )
 {
-    if (m_Window)
+    if ( m_Window )
     {
         SDL_SetWindowFullscreen( m_Window, fullscreen );
         m_Fullscreen = fullscreen;
@@ -191,7 +265,7 @@ bool Window::isFullscreen() const noexcept
 
 void Window::setVSync( bool vSync )
 {
-    if (m_Renderer)
+    if ( m_Renderer )
     {
         SDL_SetRenderVSync( m_Renderer, vSync ? 1 : 0 );
         m_VSync = vSync;
@@ -211,21 +285,52 @@ bool Window::isVSync() const noexcept
 bool SDLCALL Window::eventWatch( void* userdata, SDL_Event* event )
 {
     Window* self = static_cast<Window*>( userdata );
+
+    struct ContextSwitcher
+    {
+        ContextSwitcher( ImGuiContext* newContext )
+        {
+            previousContext = ImGui::GetCurrentContext();
+            ImGui::SetCurrentContext( newContext );
+        }
+
+        ~ContextSwitcher()
+        {
+            ImGui::SetCurrentContext( previousContext );
+        }
+
+        ImGuiContext* previousContext = nullptr;
+    } switcher( self->m_ImGuiContext );
+
+    ImGui_ImplSDL3_ProcessEvent( event );
+
     switch ( event->type )
     {
     case SDL_EVENT_WINDOW_CLOSE_REQUESTED:
-        if (event->window.windowID == SDL_GetWindowID( self->m_Window ) )
+        if ( event->window.windowID == SDL_GetWindowID( self->m_Window ) )
         {
             self->close();
         }
         break;
     case SDL_EVENT_WINDOW_RESIZED:
-        if (event->window.windowID == SDL_GetWindowID( self->m_Window ))
+        if ( event->window.windowID == SDL_GetWindowID( self->m_Window ) )
         {
-            self->m_Width = event->window.data1;
+            self->m_Width  = event->window.data1;
             self->m_Height = event->window.data2;
         }
         break;
+    case SDL_EVENT_WINDOW_DISPLAY_CHANGED:
+    case SDL_EVENT_DISPLAY_CONTENT_SCALE_CHANGED:
+    {
+        SDL_DisplayID id    = SDL_GetDisplayForWindow( self->m_Window );
+        float         scale = SDL_GetDisplayContentScale( id );
+        ImGuiStyle    style;
+        ImGui::StyleColorsDark( &style );
+        style.ScaleAllSizes( scale );
+        style.FontScaleDpi = scale;
+        ImGui::GetStyle()  = style;
+    }
+    break;
     }
 
     return true;
