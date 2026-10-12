@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.15...4.2)
 
 set( INC_FILES
+    inc/graphics/BlendMode.hpp
     inc/graphics/Window.hpp
     inc/graphics/Color.hpp
 )
 
 set( SRC_FILES 
+    src/BlendMode.cpp
     src/Window.cpp
     src/Color.cpp
 )
