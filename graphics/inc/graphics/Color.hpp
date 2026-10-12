@@ -15,7 +15,7 @@ union Color
 {
     constexpr Color() noexcept;
     constexpr explicit Color( uint32_t rgba ) noexcept;
-    constexpr Color( uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255u );
+    constexpr Color( uint8_t r, uint8_t g, uint8_t b, uint8_t a = 255u ) noexcept;
 
     ~Color() noexcept                          = default;
     constexpr Color( const Color& ) noexcept   = default;
@@ -48,6 +48,22 @@ union Color
         uint8_t b;
         uint8_t a;
     } channels;
+
+    static constexpr uint32_t RedMask   = 0x000000FF;
+    static constexpr uint32_t GreenMask = 0x0000FF00;
+    static constexpr uint32_t BlueMask  = 0x00FF0000;
+    static constexpr uint32_t AlphaMask = 0xFF000000;
+
+    static constexpr uint32_t RedShift   = 0;
+    static constexpr uint32_t GreenShift = 8;
+    static constexpr uint32_t BlueShift  = 16;
+    static constexpr uint32_t AlphaShift = 24;
+
+    static const Color White;
+    static const Color Black;
+    static const Color Red;
+    static const Color Green;
+    static const Color Blue;
 };
 
 constexpr Color::Color() noexcept
@@ -117,6 +133,8 @@ inline Color Color::operator*( const Color& rhs ) const noexcept
     const auto g = static_cast<uint8_t>( channels.g * rhs.channels.g / 255 );
     const auto b = static_cast<uint8_t>( channels.b * rhs.channels.b / 255 );
     const auto a = static_cast<uint8_t>( channels.a * rhs.channels.a / 255 );
+
+    return { r, g, b, a };
 }
 
 inline Color& Color::operator*=( const Color& rhs ) noexcept
@@ -169,7 +187,7 @@ Color Color::fromFloats( float r, float g, float b, float a )
     return { red, green, blue, alpha };
 }
 
-Color Color::fromHSV( float H, float S, float V )
+Color Color::fromHSV( float H, float S, float V ) noexcept
 {
     H = fmodf( H, 360.0f );
     if ( H < 0.0f )
